@@ -1,4 +1,6 @@
+from pyexpat import model
 import torch
+import os
 from myyololib.models import MyYOLOv8n, QYOLOv8n, NYOLOv8n
 
 def match_keys_sequential(pretrained_dict, model_dict, print_info=False):
@@ -27,6 +29,31 @@ def scale_clip_round(x, b, f):
     scale = 2 ** f
     return torch.clamp(torch.round(x * scale), qmin, qmax) 
 
+def get_state_dict(checkpoint_path, device):
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"{checkpoint_path} does not exist.")
+
+    # extension check
+    ext = os.path.splitext(checkpoint_path)[1].lower()
+
+    try:
+        if ext == ".pth":
+            # Load state_dict
+            state_dict = torch.load(checkpoint_path, map_location=device)
+            print("Loaded .pth state_dict")
+        elif ext == ".pt":
+            # Load state dict directly or state dict from full model
+            try:
+                state_dict = torch.load(checkpoint_path, map_location=device)['model_state_dict']
+            except:
+                state_dict = torch.load(checkpoint_path, map_location=device, weights_only=False)['model'].state_dict()
+        else:
+            raise ValueError("Unsupported file extension. Only (.pt, .pth) are allowed.")
+    except Exception as e:
+        print("Failed to load model:", e)
+
+    return state_dict
+
 def load_model(checkpoint_path, device, model_type="base", **kwargs):
     if model_type == "base":
         model = MyYOLOv8n()
@@ -36,16 +63,16 @@ def load_model(checkpoint_path, device, model_type="base", **kwargs):
         model = NYOLOv8n()
     model.to(device)
 
-    state_dict = torch.load(checkpoint_path, map_location=device)
+    state_dict = get_state_dict(checkpoint_path, device)
     state_dict = match_keys_sequential(state_dict, model.state_dict(), print_info=False)
     model.load_state_dict(state_dict)
 
     model.eval()
     return model
 
-def load_QAT_model(checkpoint_path, device):
+def load_QAT_model(checkpoint_path, device, **kwargs):
 
-    state_dict = torch.load(checkpoint_path, map_location=device)
+    state_dict = get_state_dict(checkpoint_path, device)
 
     # BatchNorm + Conv weight fusion
     fused_tensor_dict = {}
@@ -83,7 +110,7 @@ def load_QAT_model(checkpoint_path, device):
             or "model.22.cv3.0.2" in k or "model.22.cv3.1.2" in k or "model.22.cv3.2.2" in k):
             fused_tensor_dict[k] = state_dict[k]
 
-    Qmodel = QYOLOv8n()
+    Qmodel = QYOLOv8n(model_qcfg=kwargs.pop('model_qcfg', None))
     Qmodel.to(device)
 
     qstate_dict = match_keys_sequential(fused_tensor_dict, Qmodel.state_dict(), print_info=False)
@@ -93,11 +120,11 @@ def load_QAT_model(checkpoint_path, device):
     return Qmodel
 
 def load_NPU_model(checkpoint_path, device): # NOTE: use quantization config!!!
-    q_state_dict = torch.load(checkpoint_path, map_location=device)
+    q_state_dict = get_state_dict(checkpoint_path, device)
 
     bit_precision = 8
 
-    special = {
+    special = { # TODO: make it configurable
         'model.0.conv.weight' : 3,
         'model.0.conv.bias' : 10,
 
