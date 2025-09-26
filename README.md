@@ -3,9 +3,11 @@ compressed version of yolov8n model for npu
 
 # Setup
 ```
-!pip install pycocotools
-!pip install ultralytics
-!pip install torchmetrics
+apt-get update
+apt-get install -y libgl1-mesa-glx
+pip install pycocotools
+pip install ultralytics
+pip install torchmetrics
 ```
 # Dataset
 ```
