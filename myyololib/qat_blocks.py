@@ -42,8 +42,10 @@ def custom_clip_round(x, q_min, q_max):
 # 8bit fixed point quantization for Conv2d
 class QConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, 
-                 num_bits=8, w_fraction_bits=6, a_fraction_bits=4):
+                 qcfg=None):
         super(QConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        (num_bits, w_fraction_bits, a_fraction_bits) = [8, 6, 4] if qcfg is None else qcfg
+        # print(qcfg, num_bits, w_fraction_bits, a_fraction_bits) # debug
         self.clip_round = custom_clip_round
         self.num_bits = num_bits
         # fixed point negative scale factor
@@ -85,10 +87,15 @@ class QConv2d(nn.Conv2d):
     
 # Quantized Convolution
 class QConv(nn.Module):
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, num_bits=8, w_fraction_bits=6, a_fraction_bits=4):
+    """
+    A Convolutional layer followed by ReLU activation, both quantized using QConv2d.
+    Args:
+    qcfg (tuple): A tuple containing quantization parameters (num_bits, w_fraction_bits, a_fraction_bits).    
+    """
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, qcfg: tuple =  None):
         super().__init__()
         self.conv = QConv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=True, 
-                            num_bits=num_bits, w_fraction_bits=w_fraction_bits, a_fraction_bits=a_fraction_bits)
+                            qcfg=qcfg)
         self.act = nn.ReLU()
 
     def forward(self, x):
@@ -97,35 +104,48 @@ class QConv(nn.Module):
 # Quantized Bottleneck
 class QBottleneck(Bottleneck):
     def __init__(
-        self, c1: int, c2: int, shortcut: bool = True, g: int = 1, k: Tuple[int, int] = (3, 3), e: float = 0.5
+        self, c1: int, c2: int, shortcut: bool = True, g: int = 1, k: Tuple[int, int] = (3, 3), e: float = 0.5,
+        block_qcfg: dict = None
     ):
         super(Bottleneck, self).__init__()        
         c_ = int(c2 * e)  # hidden channels
-        self.cv1 = QConv(c1, c_, k[0], 1)
-        self.cv2 = QConv(c_, c2, k[1], 1, g=g)
+        self.cv1 = QConv(c1, c_, k[0], 1, 
+                         qcfg=None if block_qcfg is None else block_qcfg.get("cv1"))
+        self.cv2 = QConv(c_, c2, k[1], 1, g=g, 
+                         qcfg=None if block_qcfg is None else block_qcfg.get("cv2"))
         self.add = shortcut and c1 == c2
 
 # Quantized C2f
 class QC2f(C2f):
-    def __init__(self, c1: int, c2: int, n: int = 1, shortcut: bool = False, g: int = 1, e: float = 0.5):
+    def __init__(self, c1: int, c2: int, n: int = 1, shortcut: bool = False, g: int = 1, e: float = 0.5,
+                 layer_qcfg: dict = None):
         super(C2f, self).__init__()        
         self.c = int(c2 * e)  # hidden channels
-        self.cv1 = QConv(c1, 2 * self.c, 1, 1)
-        self.cv2 = QConv((2 + n) * self.c, c2, 1)
-        self.m = nn.ModuleList(QBottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+        self.cv1 = QConv(c1, 2 * self.c, 1, 1,
+                         qcfg=None if layer_qcfg is None else layer_qcfg.get("cv1"))
+        self.cv2 = QConv((2 + n) * self.c, c2, 1,
+                         qcfg=None if layer_qcfg is None else layer_qcfg.get("cv2"))
+
+        self.m = nn.ModuleList(QBottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0
+                                           , block_qcfg=None if layer_qcfg is None else layer_qcfg.get(f"m.{i}"))
+                                             for i in range(n))
 
 # Quantized SPPF
 class QSPPF(SPPF):
-    def __init__(self, c1: int, c2: int, k: int = 5):
+    def __init__(self, c1: int, c2: int, k: int = 5,
+                 layer_qcfg: dict = None):
         super(SPPF, self).__init__()        
         c_ = c1 // 2  # hidden channels
-        self.cv1 = QConv(c1, c_, 1, 1)
-        self.cv2 = QConv(c_ * 4, c2, 1, 1)
+        self.cv1 = QConv(c1, c_, 1, 1, 
+                         qcfg=None if layer_qcfg is None else layer_qcfg.get("cv1"))
+        self.cv2 = QConv(c_ * 4, c2, 1, 1,
+                         qcfg=None if layer_qcfg is None else layer_qcfg.get("cv2"))
         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
 
 # Quantized Detect
 class QDetect(Detect):
-    def __init__(self, ch: Tuple = ()):
+    def __init__(self, ch: Tuple = (),
+                  layer_qcfg: dict = None):
         super(Detect, self).__init__()        
         self.nc = 80  # number of classes
         self.nl = 3  # number of detection layers
@@ -137,17 +157,17 @@ class QDetect(Detect):
 
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
-            nn.Sequential(QConv(x, c2, 3), 
-                          QConv(c2, c2, 3), 
-                          QConv2d(c2, 4 * self.reg_max, 1, bias=True, num_bits=8, w_fraction_bits=7, a_fraction_bits=4)
+            nn.Sequential(QConv(x, c2, 3, qcfg=None if layer_qcfg is None else layer_qcfg.get("cv2.0")),
+                          QConv(c2, c2, 3, qcfg=None if layer_qcfg is None else layer_qcfg.get("cv2.1")),
+                          QConv2d(c2, 4 * self.reg_max, 1, bias=True, qcfg=None if layer_qcfg is None else layer_qcfg.get("cv2.2"))
                           ) for x in ch
         )
         self.cv3 = (
             nn.ModuleList(
                 nn.Sequential(
-                    QConv(x, c3, 3), 
-                    QConv(c3, c3, 3), 
-                    QConv2d(c3, self.nc, 1, bias=True, num_bits=8, w_fraction_bits=7, a_fraction_bits=3)
+                    QConv(x, c3, 3, qcfg=None if layer_qcfg is None else layer_qcfg.get("cv3.0")),
+                    QConv(c3, c3, 3, qcfg=None if layer_qcfg is None else layer_qcfg.get("cv3.1")),
+                    QConv2d(c3, self.nc, 1, bias=True, qcfg=None if layer_qcfg is None else layer_qcfg.get("cv3.2"))
                     ) for x in ch)
         )
         self.dfl = DFL(self.reg_max) 
