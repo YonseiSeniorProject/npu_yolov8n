@@ -16,8 +16,8 @@ def train(model, train_loader, val_loader, coco_id2label, cfg):
     batch_size = cfg.batch_size
     step_size = cfg.step_size
     gamma = cfg.gamma
-    validation_frequency = cfg.validation_frequency if 'validation_frequency' in cfg else 1
-    print_info = cfg.print_info if 'print_info' in cfg else True
+    validation_frequency = cfg.validation_frequency
+    print_info = cfg.print_info
 
     # Criterion
     criterion = v8DetectionLoss(tal_topk=10)
