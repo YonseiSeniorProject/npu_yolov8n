@@ -23,7 +23,7 @@ train_images_path = os.path.join(data_root, 'train2017')
 val_images_path = os.path.join(data_root, 'val2017')
 
 if not (os.path.exists(train_images_path) and os.path.exists(val_images_path) and os.path.exists(annotations_dir)):
-    print("COCO 2017 데이터셋을 다운로드합니다. 시간이 오래 걸릴 수 있습니다...")
+    print("Downloading COCO 2017 dataset. It takes time...")
 
     urls = {
         'annotations': 'http://images.cocodataset.org/annotations/annotations_trainval2017.zip',
@@ -35,15 +35,15 @@ if not (os.path.exists(train_images_path) and os.path.exists(val_images_path) an
         zip_path = os.path.join(download_root, os.path.basename(url))
         if not os.path.exists(zip_path.replace('.zip', '')):
             os.makedirs(download_root, exist_ok=True)
-            print(f"{os.path.basename(url)} 다운로드 중...")
+            print(f"{os.path.basename(url)} downloading...")
             urllib.request.urlretrieve(url, zip_path)
-            print("압축 해제 중...")
+            print("unzip...")
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(download_root)
-            os.remove(zip_path) # 압축 해제 후 zip 파일 삭제
-            print("완료.")
+            os.remove(zip_path) 
+            print("done.")
         else:
-            print(f"{os.path.basename(zip_path).replace('.zip','')}가 이미 존재합니다.")
+            print(f"{os.path.basename(zip_path).replace('.zip','')}already exists.")
 
     download_and_unzip(urls['annotations'], data_root)
     download_and_unzip(urls['train2017'], data_root)
