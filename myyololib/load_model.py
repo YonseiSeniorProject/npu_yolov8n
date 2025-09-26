@@ -27,11 +27,11 @@ def scale_clip_round(x, b, f):
     scale = 2 ** f
     return torch.clamp(torch.round(x * scale), qmin, qmax) 
 
-def load_model(checkpoint_path, device, model_type="base"):
+def load_model(checkpoint_path, device, model_type="base", **kwargs):
     if model_type == "base":
         model = MyYOLOv8n()
     elif model_type == "qat":
-        model = QYOLOv8n()
+        model = QYOLOv8n(model_qcfg=kwargs.pop('model_qcfg', None))
     elif model_type == "npu":
         model = NYOLOv8n()
     model.to(device)

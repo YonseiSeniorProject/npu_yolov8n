@@ -208,4 +208,7 @@ __marimo__/
 
 # Custom ignores
 datasets/
-
+test.ipynb
+.vscode/
+.conda/
+*.jpg
