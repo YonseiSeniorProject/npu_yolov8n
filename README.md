@@ -57,6 +57,6 @@ else:
 # train
 ```
 python train.py -eval
-python train.py -eval --base_model 'checkpoints/relu_091214.pth' --quant_config 'config/finetune_config.yaml'
+python train.py -eval --base_model 'checkpoints/relu_091214.pth' --quant_config 'config/quantization_config.yaml'
 
 ```
