@@ -70,7 +70,7 @@ def train(model, train_loader, val_loader, coco_id2label, cfg):
 
         # Optional validation every `validation_frequency` epochs
         if (epoch + 1) % validation_frequency == 0:
-            evaluate(model, val_loader, map_only=True)
+            evaluate(model, val_loader, coco_id2label, map_only=True, return_results=False)
         if print_info:
             print(f"Epoch: {epoch+1}/{num_epochs} \t| "
                 f"Train Loss: {train_loss} \t| "
