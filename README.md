@@ -52,7 +52,7 @@ if not (os.path.exists(train_images_path) and os.path.exists(val_images_path) an
 else:
     print("dataset already exists.")
 ```
-# train
+# QAT fine-tuning
 ```
 python train.py -eval
 python train.py -eval --base_model 'checkpoints/relu_091214.pth' --quant_config 'config/quantization_config.yaml'
