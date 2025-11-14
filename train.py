@@ -16,7 +16,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='for QAT model fine-tuning') # TODO: add full model finetuning
     parser.add_argument('-b', '--base_model', type=str, default='./checkpoints/relu_091214.pth', help='Path to the base model checkpoint')
-    parser.add_argument('-q', '--quant_config', type=str, default='./config/quantization_config.yaml', help='Path to the config file')
+    parser.add_argument('-q', '--quant_config', type=str, default='./config/q8_signed.yaml', help='Path to the config file')
     parser.add_argument('-eval', '--evaluate', help='whether to evaluate the model', action='store_true', default=False)
     args = parser.parse_args()
 
