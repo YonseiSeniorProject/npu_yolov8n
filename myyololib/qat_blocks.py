@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from typing import Tuple
 from myyololib.basic_blocks import Conv, Bottleneck, C2f, SPPF, Detect, DFL, autopad
 
-
 # STE module for QAT
 class STE(torch.autograd.Function):
     @staticmethod
@@ -16,10 +15,9 @@ class STE(torch.autograd.Function):
 
         # forward pass: clamp and round
         temp = x.clone()
-        x_clamped = torch.clamp(temp, q_min, q_max)
-        x_rounded = x_clamped.round()
-
-        return x_rounded
+        x_rounded = temp.round()
+        x_clamped = torch.clamp(x_rounded, q_min, q_max)
+        return x_clamped
     
     @staticmethod
     def backward(ctx, grad_out):
@@ -36,8 +34,41 @@ class STE(torch.autograd.Function):
 
         return grad_input, None, None
     
-def custom_clip_round(x, q_min, q_max):
+def custom_round_clip(x, q_min, q_max):
     return STE.apply(x, q_min, q_max)
+
+class STE_BitShift(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, q_min, q_max):
+        # Save the input tensor and quantization parameters for backward pass
+        ctx.save_for_backward(x)
+        ctx.q_min = q_min
+        ctx.q_max = q_max
+
+        # forward pass: clamp and round
+        temp = x.clone()
+        x_rounded = temp.floor()
+        x_clamped = torch.clamp(x_rounded, q_min, q_max)
+        return x_clamped
+    
+    @staticmethod
+    def backward(ctx, grad_out):
+        # Retrieve the saved tensor and quantization parameters
+        x, = ctx.saved_tensors
+        q_min, q_max = ctx.q_min, ctx.q_max
+
+        # clipping range mask
+        out_of_range_mask = (x < q_min) | (x > q_max)
+
+        # Gradient is passed through only for values within the clipping range
+        grad_input = grad_out.clone()
+        grad_input[out_of_range_mask] = 0
+
+        return grad_input, None, None
+    
+def custom_floor_clip(x, q_min, q_max):
+    return STE_BitShift.apply(x, q_min, q_max)
+
 
 # 8bit fixed point quantization for Conv2d
 class QConv2d(nn.Conv2d):
@@ -46,7 +77,9 @@ class QConv2d(nn.Conv2d):
         super(QConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
         (num_bits, w_fraction_bits, a_fraction_bits) = [8, 6, 4] if qcfg is None else qcfg
         # print(qcfg, num_bits, w_fraction_bits, a_fraction_bits) # debug
-        self.clip_round = custom_clip_round
+        self.round_clip = custom_round_clip
+        self.floor_clip = custom_floor_clip
+        
         self.num_bits = num_bits
         # fixed point negative scale factor
         self.w_scale = 2 ** w_fraction_bits
@@ -65,7 +98,7 @@ class QConv2d(nn.Conv2d):
         return quant_w
     
     def act_quantizer(self, x):
-        quant_x = self.discretizer(x, self.a_scale, self.min_val, self.max_val)
+        quant_x = self.discretizer_bitshift(x, self.a_scale, self.min_val, self.max_val)
         return quant_x
 
     def bias_quantizer(self, b):
@@ -73,7 +106,10 @@ class QConv2d(nn.Conv2d):
         return quant_b
     
     def discretizer(self, v, scale, min_val, max_val):
-        return self.clip_round(v * scale, min_val, max_val) / scale
+        return self.round_clip(v * scale, min_val, max_val) / scale
+    
+    def discretizer_bitshift(self, v, scale, min_val, max_val):
+        return self.floor_clip(v * scale, min_val, max_val) / scale
 
     def forward(self, x):
             
@@ -92,7 +128,7 @@ class QConv(nn.Module):
     Args:
     qcfg (tuple): A tuple containing quantization parameters (num_bits, w_fraction_bits, a_fraction_bits).    
     """
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, qcfg: tuple =  None):
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, qcfg=None):
         super().__init__()
         self.conv = QConv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=True, 
                             qcfg=qcfg)

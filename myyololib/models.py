@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from myyololib.basic_blocks import Conv, C2f, SPPF, Detect, Concat
-from myyololib.qat_blocks import QConv, QC2f, QSPPF, QDetect, custom_clip_round
+from myyololib.qat_blocks import QConv, QC2f, QSPPF, QDetect, custom_floor_clip
 from myyololib.npu_blocks import NConv, NC2f, NSPPF, NDetect
 
 
@@ -104,7 +104,7 @@ class QYOLOv8n(nn.Module):
         self.input_scale = 2 ** self.input_fraction_bits
         self.input_min = -2 ** (self.input_precision - 1)
         self.input_max = 2 ** (self.input_precision - 1) - 1
-        x = custom_clip_round(x*self.input_scale, self.input_min, self.input_max)/self.input_scale
+        x = custom_floor_clip(x*self.input_scale, self.input_min, self.input_max)/self.input_scale
 
         skip_connection = {
             6: 11,
@@ -138,32 +138,35 @@ class QYOLOv8n(nn.Module):
     
 
 class NYOLOv8n(nn.Module):
-    def __init__(self, ch=3, nc=80):
+    def __init__(self, ch=3, nc=80, model_ncfg: dict = {}):
         super().__init__()
+        if model_ncfg is None:
+            print("No NPU config provided, using default settings.")
+            model_ncfg = {}
         self.model = nn.Sequential(
-            NConv(ch, 16, 3, 2, fx=7, fw=3, fy=4, vis=True),                         # 0
-            NConv(16, 32, 3, 2),                         # 1
-            NC2f(32, 32, 1, True),                       # 2
-            NConv(32, 64, 3, 2),                         # 3
-            NC2f(64, 64, 2, True),                       # 4
-            NConv(64, 128, 3, 2),                        # 5
-            NC2f(128, 128, 2, True),                     # 6
-            NConv(128, 256, 3, 2),                       # 7
-            NC2f(256, 256, 1, True),                     # 8
-            NSPPF(256, 256, 5),                          # 9
+            NConv(ch, 16, 3, 2,     ncfg=model_ncfg.get("layer_0")),                         # 0
+            NConv(16, 32, 3, 2,     ncfg=model_ncfg.get("layer_1")),                         # 1
+            NC2f(32, 32, 1, True,   layer_ncfg=model_ncfg.get("layer_2")),                       # 2
+            NConv(32, 64, 3, 2,     ncfg=model_ncfg.get("layer_3")),                         # 3
+            NC2f(64, 64, 2, True,   layer_ncfg=model_ncfg.get("layer_4")),                       # 4
+            NConv(64, 128, 3, 2,    ncfg=model_ncfg.get("layer_5")),                        # 5
+            NC2f(128, 128, 2, True, layer_ncfg=model_ncfg.get("layer_6")),                     # 6
+            NConv(128, 256, 3, 2,   ncfg=model_ncfg.get("layer_7")),                       # 7
+            NC2f(256, 256, 1, True, layer_ncfg=model_ncfg.get("layer_8")),                     # 8
+            NSPPF(256, 256, 5,      layer_ncfg=model_ncfg.get("layer_9")),                          # 9
             nn.Upsample(scale_factor=2, mode='nearest'),# 10
             Concat(dimension=1),                        # 11
-            NC2f(384, 128, 1, False),                    # 12
+            NC2f(384, 128, 1, False, layer_ncfg=model_ncfg.get("layer_12")),                    # 12
             nn.Upsample(scale_factor=2, mode='nearest'),# 13
             Concat(dimension=1),                        # 14
-            NC2f(192, 64, 1, False),                     # 15
-            NConv(64, 64, 3, 2),                         # 16
+            NC2f(192, 64, 1, False, layer_ncfg=model_ncfg.get("layer_15")),                     # 15
+            NConv(64, 64, 3, 2, ncfg=model_ncfg.get("layer_16")),                         # 16
             Concat(dimension=1),                        # 17
-            NC2f(192, 128, 1, False),                    # 18
-            NConv(128, 128, 3, 2),                       # 19
+            NC2f(192, 128, 1, False, layer_ncfg=model_ncfg.get("layer_18")),                    # 18
+            NConv(128, 128, 3, 2, ncfg=model_ncfg.get("layer_19")),                       # 19
             Concat(dimension=1),                        # 20
-            NC2f(384, 256, 1, False),                    # 21
-            NDetect((64, 128, 256))                  # 22, [P3, P4, P5] 
+            NC2f(384, 256, 1, False, layer_ncfg=model_ncfg.get("layer_21")),                    # 21
+            NDetect((64, 128, 256), layer_ncfg=model_ncfg.get("layer_22"))                  # 22, [P3, P4, P5] 
         )
 
     def forward(self, x, inference=False, do_postprocessing=False, conf_threshold=0.25, max_det=300, iou_threshold=0.7):    
@@ -173,7 +176,7 @@ class NYOLOv8n(nn.Module):
         self.input_scale = 2 ** self.input_fraction_bits
         self.input_min = -2 ** (self.input_precision - 1)
         self.input_max = 2 ** (self.input_precision - 1) - 1
-        x = custom_clip_round(x*self.input_scale, self.input_min, self.input_max) # convert to int8 range
+        x = custom_floor_clip(x*self.input_scale, self.input_min, self.input_max) # convert to int8 range
 
         skip_connection = {
             6: 11,
