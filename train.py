@@ -4,12 +4,9 @@ import torch
 import numpy as np
 import yaml
 
-from myyololib.dataset import get_dataloader
-
-from myyololib.train_config import TrainConfig, FinetuneConfig
-from myyololib.trainer import train
-from myyololib.evaluator import evaluate
-from myyololib.load_model import load_model, load_QAT_model, load_NPU_model
+from npu_yolov8n import get_dataloader
+from npu_yolov8n.training import train, evaluate, TrainConfig, FinetuneConfig
+from npu_yolov8n import load_model, load_QAT_model, load_NPU_model
 
 import argparse
 from datetime import datetime
