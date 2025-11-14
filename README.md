@@ -14,6 +14,6 @@ python download_dataset.py
 # QAT fine-tuning
 ```
 python train.py -eval
-python train.py -eval --base_model 'checkpoints/relu_091214.pth' --quant_config 'config/quantization_config.yaml'
+python train.py -eval --base_model 'checkpoints/relu_091214.pth' --quant_config 'config/q8_signed.yaml'
 
 ```
