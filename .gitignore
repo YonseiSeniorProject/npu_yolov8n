@@ -216,3 +216,11 @@ datasets/
 *.log
 *.pth
 *.pt
+
+# no pycache files
+*.pyc
+*.pyo
+
+# ipynb files
+!notebooks/
+!notebooks/tutorial.ipynb
