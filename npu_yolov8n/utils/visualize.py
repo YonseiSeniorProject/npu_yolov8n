@@ -148,13 +148,20 @@ class ActivationStatsCollector:
         model (nn.Module): model
         layer_class (nn.Module): class to hook. (single class or tuple of classes)
     """
-    def __init__(self, model, layer_class=nn.Conv2d):
+    def __init__(self, model, layer_class=nn.Conv2d, mode="input"):
+        assert mode in ("input", "output"), "mode must be 'input' or 'output'"
+        self.mode = mode
         self.activation_stats = {}
         self._register_hooks(model, layer_class)
 
     def _get_hook(self, name):
         def hook(module, input, output):
-            x = input[0].detach().cpu()
+            if self.mode == "input":
+                x = input[0].detach().cpu()
+            elif self.mode == "output":
+                x = output.detach().cpu()
+            else:
+                raise ValueError("Invalid mode")
             self.activation_stats[name].append(x)
         return hook
 

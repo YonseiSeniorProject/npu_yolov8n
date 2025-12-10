@@ -140,6 +140,7 @@ class QYOLOv8n(nn.Module):
 class NYOLOv8n(nn.Module):
     def __init__(self, ch=3, nc=80, model_ncfg: dict = {}):
         super().__init__()
+        self.ncfg = model_ncfg
         if model_ncfg is None:
             print("No NPU config provided, using default settings.")
             model_ncfg = {}

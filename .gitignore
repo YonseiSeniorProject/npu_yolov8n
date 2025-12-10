@@ -216,6 +216,7 @@ datasets/
 *.log
 *.pth
 *.pt
+*.bin
 
 # no pycache files
 *.pyc
@@ -223,4 +224,6 @@ datasets/
 
 # ipynb files
 !notebooks/
-!notebooks/tutorial.ipynb
+!notebooks/npu_model_test.ipynb
+!notebooks/weight_value_analysis.ipynb
+!notebooks/export_npu_weights.ipynb
