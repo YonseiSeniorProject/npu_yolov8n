@@ -1,6 +1,6 @@
 from .evaluator import evaluate
 from .trainer import train
-from .train_config import TrainConfig, FinetuneConfig
+from .train_config import TrainConfig, FinetuneConfig, PruningFTConfig
 
 __all__ = [
     "evaluate",
