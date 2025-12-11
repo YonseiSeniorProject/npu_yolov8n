@@ -75,34 +75,45 @@ class QConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, 
                  qcfg=None):
         super(QConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        if qcfg is None:
+            print("Warning: QConv2d initialized without quantization config, using default 8-bit quantization.")
         (num_bits, w_fraction_bits, a_fraction_bits) = [8, 6, 4] if qcfg is None else qcfg
         # print(qcfg, num_bits, w_fraction_bits, a_fraction_bits) # debug
         self.round_clip = custom_round_clip
         self.floor_clip = custom_floor_clip
         
+        if isinstance(num_bits, list):
+            self.num_bits_w = num_bits[0]
+            self.num_bits_a = num_bits[1]
+        else:
+            self.num_bits_w = num_bits
+            self.num_bits_a = num_bits
         self.num_bits = num_bits
         # fixed point negative scale factor
         self.w_scale = 2 ** w_fraction_bits
         self.a_scale = 2 ** a_fraction_bits
         self.b_scale = self.w_scale * self.a_scale
-        # quantization range
-        self.min_val = -2 ** (num_bits - 1)
-        self.max_val = 2 ** (num_bits - 1) - 1
+        # weight quantization range
+        self.min_val_w = -2 ** (self.num_bits_w - 1)
+        self.max_val_w = 2 ** (self.num_bits_w - 1) - 1
+        # activation quantization range
+        self.min_val_a = -2 ** (self.num_bits_a - 1)
+        self.max_val_a = 2 ** (self.num_bits_a - 1) - 1
         # bias quantization range is twice wider than weight/activation since y = b + w*a
-        self.b_min_val = -2 ** (2*num_bits - 1)
-        self.b_max_val = 2 ** (2*num_bits - 1) - 1
+        self.min_val_b = -2 ** ((self.num_bits_a + self.num_bits_w) - 1)
+        self.max_val_b = 2 ** ((self.num_bits_a + self.num_bits_w) - 1) - 1
 
     # weight, bias, and activation quantizers
     def weight_quantizer(self, w):
-        quant_w = self.discretizer(w, self.w_scale, self.min_val, self.max_val)
+        quant_w = self.discretizer(w, self.w_scale, self.min_val_w, self.max_val_w)
         return quant_w
     
     def act_quantizer(self, x):
-        quant_x = self.discretizer_bitshift(x, self.a_scale, self.min_val, self.max_val)
+        quant_x = self.discretizer_bitshift(x, self.a_scale, self.min_val_a, self.max_val_a)
         return quant_x
 
     def bias_quantizer(self, b):
-        quant_b = self.discretizer(b, self.b_scale, self.b_min_val, self.b_max_val)
+        quant_b = self.discretizer(b, self.b_scale, self.min_val_b, self.max_val_b)
         return quant_b
     
     def discretizer(self, v, scale, min_val, max_val):

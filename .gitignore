@@ -227,3 +227,6 @@ datasets/
 !notebooks/npu_model_test.ipynb
 !notebooks/weight_value_analysis.ipynb
 !notebooks/export_npu_weights.ipynb
+!notebooks/get_npu_config.ipynb
+
+notebooks/*.py
