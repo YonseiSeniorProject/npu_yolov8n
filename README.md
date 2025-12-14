@@ -24,6 +24,7 @@ python download_dataset.py
 ```
 
 # Directory Structure
+```
 .
 ├── train.py                 # QAT evaluation script
 ├── download_dataset.py      # COCO2017 download script
@@ -36,11 +37,15 @@ python download_dataset.py
     ├── pruning/             # Model pruning (not implemented yet)
     ├── training/            # Training and QAT logic
     └── utils/               # Common utilities
-    
+```
+
 # Quantization-Aware Training (QAT)
 ```
 python train.py -eval
 python train.py -eval --base_model 'checkpoints/relu_091214.pth' --quant_config 'config/q8_signed.yaml'
 
 ```
+# experiments
+![QuantizationexperimentresultsfortheYOLOv8n
+model](assets/experiment.png)
 
