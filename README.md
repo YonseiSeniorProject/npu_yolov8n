@@ -45,7 +45,7 @@ python train.py -eval
 python train.py -eval --base_model 'checkpoints/relu_091214.pth' --quant_config 'config/q8_signed.yaml'
 
 ```
-# experiments
+# Experiments
 ![QuantizationexperimentresultsfortheYOLOv8n
 model](assets/experiment.png)
 
